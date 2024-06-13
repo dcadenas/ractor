@@ -12,7 +12,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! ractor = "0.9"
+//! ractor = "0.10"
 //! ```
 //!
 //! The minimum supported Rust version (MSRV) is 1.64. However if you disable the `async-trait` feature, then you need Rust >= 1.75 due to the native
@@ -155,8 +155,11 @@
 pub mod actor;
 #[cfg(test)]
 pub(crate) mod common_test;
+#[cfg(test)]
+pub use common_test::*;
 pub mod concurrency;
 pub mod errors;
+#[cfg(feature = "async-trait")]
 pub mod factory;
 pub mod macros;
 pub mod message;
@@ -167,6 +170,9 @@ pub mod rpc;
 #[cfg(feature = "cluster")]
 pub mod serialization;
 pub mod time;
+
+#[cfg(not(feature = "async-trait"))]
+use strum as _;
 
 // ======================== Test Modules and blind imports ======================== //
 

@@ -43,7 +43,7 @@ async fn test_panic_on_start_captured() {
     }
 
     let actor_output = Actor::spawn(None, TestActor, ()).await;
-    assert!(matches!(actor_output, Err(SpawnErr::StartupPanic(_))));
+    assert!(matches!(actor_output, Err(SpawnErr::StartupFailed(_))));
 }
 
 #[crate::concurrency::test]
@@ -67,7 +67,7 @@ async fn test_error_on_start_captured() {
     }
 
     let actor_output = Actor::spawn(None, TestActor, ()).await;
-    assert!(matches!(actor_output, Err(SpawnErr::StartupPanic(_))));
+    assert!(matches!(actor_output, Err(SpawnErr::StartupFailed(_))));
 }
 
 #[crate::concurrency::test]
@@ -935,7 +935,7 @@ fn returns_actor_references() {
         (true, SupervisionEvent::ActorStarted(dummy_actor_cell())),
         (
             true,
-            SupervisionEvent::ActorPanicked(dummy_actor_cell(), "Bang!".into()),
+            SupervisionEvent::ActorFailed(dummy_actor_cell(), "Bang!".into()),
         ),
         (
             true,
@@ -955,4 +955,48 @@ fn returns_actor_references() {
         assert_eq!(event.actor_cell().is_some(), want);
         assert_eq!(event.actor_id().is_some(), want);
     }
+}
+
+/// https://github.com/slawlor/ractor/issues/240
+#[crate::concurrency::test]
+#[tracing_test::traced_test]
+async fn actor_failing_in_spawn_err_doesnt_poison_registries() {
+    struct Test;
+
+    #[crate::async_trait]
+    impl Actor for Test {
+        type Msg = ();
+        type State = ();
+        type Arguments = ();
+
+        async fn pre_start(&self, _: ActorRef<Self::Msg>, _: ()) -> Result<(), ActorProcessingErr> {
+            Err("something".into())
+        }
+    }
+
+    struct Test2;
+
+    #[crate::async_trait]
+    impl Actor for Test2 {
+        type Msg = ();
+        type State = ();
+        type Arguments = ();
+
+        async fn pre_start(&self, _: ActorRef<Self::Msg>, _: ()) -> Result<(), ActorProcessingErr> {
+            Ok(())
+        }
+    }
+
+    let a = Actor::spawn(Some("test".to_owned()), Test, ()).await;
+    assert!(a.is_err());
+    drop(a);
+
+    let (a, h) = Actor::spawn(Some("test".to_owned()), Test2, ())
+        .await
+        .expect("Failed to spawn second actor with name clash");
+
+    // startup ok, we were able to reuse the name
+
+    a.stop(None);
+    h.await.unwrap();
 }
